@@ -1,6 +1,7 @@
 import { MintingService } from "../src/services/contracts/acbuMinting.service";
 import { contractClient } from "../src/services/stellar/contractClient";
 import { prisma } from "../src/config/database";
+import type { TransactionStatus } from "../src/utils/transactionStateMachine";
 
 jest.mock("../src/services/stellar/contractClient", () => ({
   contractClient: { invokeContract: jest.fn() },
@@ -26,7 +27,7 @@ describe("MintingService Compensation", () => {
     jest.clearAllMocks();
   });
 
-  it("marks tx FAILED if stellar throws", async () => {
+  it("marks tx failed if stellar throws", async () => {
     const service = new MintingService("contract-id");
     (contractClient.invokeContract as jest.Mock).mockRejectedValue(new Error("Stellar Fail"));
 
@@ -41,7 +42,27 @@ describe("MintingService Compensation", () => {
 
     expect(prisma.transaction.update).toHaveBeenCalledWith({
       where: { id: "123" },
-      data: { status: "FAILED" },
+      data: { status: "failed" },
     });
+  });
+
+  it("writes a status that is valid for the transaction state machine", async () => {
+    const service = new MintingService("contract-id");
+    (contractClient.invokeContract as jest.Mock).mockRejectedValue(new Error("Stellar Fail"));
+
+    await expect(
+      service.mintFromUsdc({
+        user: "user",
+        usdcAmount: "100",
+        recipient: "rec",
+        txId: "123",
+      } as any),
+    ).rejects.toThrow("Stellar Fail");
+
+    const updateArgs = (prisma.transaction.update as jest.Mock).mock.calls[0][0];
+    const status = updateArgs.data.status as TransactionStatus;
+
+    expect(["pending", "processing", "completed", "failed"]).toContain(status);
+    expect(status).toBe(status.toLowerCase());
   });
 });
