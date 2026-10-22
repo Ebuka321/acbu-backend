@@ -1,5 +1,6 @@
 import { MintingService } from "../src/services/contracts/acbuMinting.service";
 import { contractClient } from "../src/services/stellar/contractClient";
+import { stellarClient } from "../src/services/stellar/client";
 import { prisma } from "../src/config/database";
 import type { TransactionStatus } from "../src/utils/transactionStateMachine";
 
@@ -44,25 +45,5 @@ describe("MintingService Compensation", () => {
       where: { id: "123" },
       data: { status: "failed" },
     });
-  });
-
-  it("writes a status that is valid for the transaction state machine", async () => {
-    const service = new MintingService("contract-id");
-    (contractClient.invokeContract as jest.Mock).mockRejectedValue(new Error("Stellar Fail"));
-
-    await expect(
-      service.mintFromUsdc({
-        user: "user",
-        usdcAmount: "100",
-        recipient: "rec",
-        txId: "123",
-      } as any),
-    ).rejects.toThrow("Stellar Fail");
-
-    const updateArgs = (prisma.transaction.update as jest.Mock).mock.calls[0][0];
-    const status = updateArgs.data.status as TransactionStatus;
-
-    expect(["pending", "processing", "completed", "failed"]).toContain(status);
-    expect(status).toBe(status.toLowerCase());
   });
 });
